@@ -1,0 +1,53 @@
+#include "move_manager.h"
+#include "position.h"
+#include "types.h"
+#include "consts.h"
+#include "pieces.h"
+#include "bitboard.h"
+#include "display.h"
+#include "squares.h"
+
+void MakeMove(Position *position, Move *move)
+{
+    const int fromSq = move->fromSq;
+    const int toSq = move->toSq;
+
+    const U64 bbToSq = 1ULL << toSq;
+    const U64 bbFrom = 1ULL << fromSq;
+    const int middleSquare = (fromSq + toSq) / 2;
+    const int typeOfMove = move->typeOfMove;
+    const int us = position->sideToMove;
+    const int enemy = us ^ 1;
+    const U64 enpassantSq = position->enpassantSq;
+
+    for (int piece = PAWN; piece <= KING; piece++)
+    {
+        position->piecesByType[piece] &= ~(bbToSq);
+    }
+
+    position->piecesByColor[us] ^= (bbToSq | bbFrom);
+    position->piecesByColor[enemy] &= ~(bbToSq | (((bbToSq << 8) >> (16 * enemy)) * (enpassantSq == bbToSq) * (typeOfMove == PAWN)));
+
+    position->piecesByType[move->typeOfMove] ^= (bbFrom ^ bbToSq);
+    position->piecesByType[PAWN] ^= (bbToSq & move->promotion);
+
+    position->enpassantSq = ((1ULL << middleSquare) & FILES_BB[GetFileFromSquare(fromSq)] & FILES_BB[GetFileFromSquare(toSq)]) * (PAWN == typeOfMove);
+
+    position->piecesByType[ROOK] ^= (0xa0 * (move->castles== 1));
+    position->piecesByColor[us] ^= (0xa0 * (move->castles== 1));
+
+    position->piecesByType[ROOK] ^= (0x9 * (move->castles == 2));
+    position->piecesByColor[us] ^= (0x9 * (move->castles == 2));
+
+    position->piecesByType[ROOK] ^= (0x900000000000000ULL * (move->castles == 8));
+    position->piecesByColor[us] ^= (0x900000000000000ULL * (move->castles == 8));
+
+    position->piecesByType[ROOK] ^= (0xa000000000000000ULL * (move->castles == 4));
+    position->piecesByColor[us] ^= (0xa000000000000000ULL * (move->castles == 4));
+
+    position->castleRights[us] &= ~(CastleRightsConsts[fromSq]);
+    position->castleRights[enemy] &= ~(CastleRightsConsts[toSq]);
+
+    // Handle castling.
+    position->piecesByType[EMPTY] = ~(position->piecesByColor[COLOR_WHITE] | position->piecesByColor[COLOR_BLACK]);
+}
